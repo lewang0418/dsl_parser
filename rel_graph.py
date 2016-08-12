@@ -452,26 +452,39 @@ def _handle_connected_to_and_depends_on(ctx):
                     relationship,
                     target_node_instance_id=target_node_instance_id)
 
-                if connection_type == ONE_TO_ONE:
-                    #if ctx.modification:
-                    to_add = True
-                    if _find_one_to_one_relationship(ctx, relationship_instance):
-                        for instance in extract_node_instances(ctx.previous_deployment_node_graph):
-                            if instance.id == source_node_instance_id:
-                                to_add = False
-                                continue
-                        if to_add:
-                            if target_node_instance_id not in existing_target_node_instance_ids and \
-                                source_node_instance_id not in existing_target_node_instance_ids and \
-                                target_node_instance_id not in previous_target_node_instance_ids and \
-                                source_node_instance_id not in previous_source_node_instance_ids:
+                print "---------------------"
+                print source_node_instance_id
+                print target_node_instance_id
+                print relationship_instance
+                print connection_type
 
-                                existing_target_node_instance_ids.append(target_node_instance_id)
-                                existing_target_node_instance_ids.append(source_node_instance_id)
-                                ctx.deployment_node_graph.add_edge(
-                                    source_node_instance_id, target_node_instance_id,
-                                    relationship=relationship_instance)
-                        continue
+                if connection_type == ONE_TO_ONE:
+                    # Update node graph when scaling up
+                    if ctx.modification:
+                        if _find_one_to_one_relationship(ctx, relationship_instance):
+                            to_add = True
+                            for instance in extract_node_instances(ctx.previous_deployment_node_graph):
+                                if instance.id == source_node_instance_id:
+                                    to_add = False
+                                    continue
+                            if to_add:
+                                if target_node_instance_id not in existing_target_node_instance_ids and \
+                                    source_node_instance_id not in existing_target_node_instance_ids and \
+                                    target_node_instance_id not in previous_target_node_instance_ids and \
+                                    source_node_instance_id not in previous_source_node_instance_ids:
+
+                                    existing_target_node_instance_ids.append(target_node_instance_id)
+                                    existing_target_node_instance_ids.append(source_node_instance_id)
+                                    ctx.deployment_node_graph.add_edge(
+                                        source_node_instance_id, target_node_instance_id,
+                                        relationship=relationship_instance)
+
+                    else:
+                        # Create node graph when being initiated
+                        ctx.deployment_node_graph.add_edge(
+                             source_node_instance_id, target_node_instance_id,
+                             relationship=relationship_instance)
+                    continue
                 elif connection_type == ONE_TO_ALL or connection_type == ALL_TO_ALL:
                     ctx.deployment_node_graph.add_edge(
                         source_node_instance_id, target_node_instance_id,
