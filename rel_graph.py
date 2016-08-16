@@ -334,9 +334,6 @@ def _handle_removed_instances(ctx,
         previous_instances_num,
         total_instances_num,
         modified_node):
-
-    print ctx.modified_nodes
-
     removed_instances_num = previous_instances_num - total_instances_num
     removed_ids_include_hint = modified_node.get(
         'removed_ids_include_hint', [])
@@ -451,12 +448,6 @@ def _handle_connected_to_and_depends_on(ctx):
                 relationship_instance = _relationship_instance_copy(
                     relationship,
                     target_node_instance_id=target_node_instance_id)
-
-                print "---------------------"
-                print source_node_instance_id
-                print target_node_instance_id
-                print relationship_instance
-                print connection_type
 
                 if connection_type == ONE_TO_ONE:
                     # Update node graph when scaling up

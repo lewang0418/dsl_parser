@@ -273,6 +273,9 @@ class GetAttribute(Function):
         else:
             node_instance = self._resolve_node_instance_by_name(storage)
 
+        print "evaluate_runtime node instance:", node_instance
+        print "----------------------"
+
         value = _get_property_value(node_instance.node_id,
                                     node_instance.runtime_properties,
                                     self.attribute_path,
@@ -300,11 +303,25 @@ class GetAttribute(Function):
         if len(node_instances) == 1:
             return node_instances[0]
 
+        print "node_id:", node_id
+        print "node_instances:", node_instances
+        print "--------"
+
+        node_instance = self._resolve_node_instance_through_depth_of_relationship(
+            storage=storage,
+            node_instances=node_instances)
+        if node_instance:
+            return node_instance
+
+
+
         node_instance = self._try_resolve_node_instance_by_relationship(
             storage=storage,
             node_instances=node_instances)
         if node_instance:
             return node_instance
+
+
 
         node_instance = self._try_resolve_node_instance_by_scaling_group(
             storage=storage,
@@ -318,6 +335,52 @@ class GetAttribute(Function):
             'resolve a node instance unambiguously.'
             .format(self.node_name))
 
+
+    def _resolve_node_instance_ids_through_depth_of_relationship(
+            self,
+            storage,
+            instance_id,
+            node_instances_target_ids):
+        instance = storage.get_node_instance(instance_id)
+        instance_relationships = instance.relationships or []
+
+        for relationship in instance_relationships:
+            if relationship['target_name'] == self.node_name:
+                node_instances_target_ids.add(relationship['target_id'])
+                print "---"
+                print "self_instance_id:", instance_id, self.node_name
+                print "instance:", instance
+                print "relationship['target_id']:", relationship['target_id']
+                print "node_instances_target_ids:", node_instances_target_ids
+                print "---"
+            else:
+                self._resolve_node_instance_ids_through_depth_of_relationship(storage, relationship['target_id'], node_instances_target_ids)
+
+
+    # CHANGED: go through the depth of relationships to find node instance
+    def _resolve_node_instance_through_depth_of_relationship(
+            self,
+            storage,
+            node_instances):
+
+        self_instance_id = self.context.get('self')
+        if not self_instance_id:
+            return None
+
+        node_instances_target_ids = set()
+        self._resolve_node_instance_ids_through_depth_of_relationship(storage, self_instance_id, node_instances_target_ids)
+        print "node_instances_target_ids:", node_instances_target_ids
+        if len(node_instances_target_ids) != 1:
+            return None
+        node_instance_target_id = node_instances_target_ids.pop()
+
+        for node_instance in node_instances:
+            if node_instance.id == node_instance_target_id:
+                return node_instance
+        else:
+            raise RuntimeError('Illegal state')
+
+
     def _try_resolve_node_instance_by_relationship(
             self,
             storage,
@@ -327,13 +390,16 @@ class GetAttribute(Function):
             return None
         self_instance = storage.get_node_instance(self_instance_id)
         self_instance_relationships = self_instance.relationships or []
+
         node_instances_target_ids = set()
         for relationship in self_instance_relationships:
             if relationship['target_name'] == self.node_name:
                 node_instances_target_ids.add(relationship['target_id'])
         if len(node_instances_target_ids) != 1:
             return None
+
         node_instance_target_id = node_instances_target_ids.pop()
+
         for node_instance in node_instances:
             if node_instance.id == node_instance_target_id:
                 return node_instance
@@ -358,7 +424,9 @@ class GetAttribute(Function):
             return None
 
         def _containing_groups(_instance):
-            result = [g['name'] for g in _instance.scaling_groups or []]
+            result = []
+            if hasattr(_instance, 'scaling_groups'):
+                result = [g['name'] for g in _instance.scaling_groups or []]
             parent_instance = _parent_instance(_instance)
             if parent_instance:
                 result += _containing_groups(parent_instance)
@@ -368,6 +436,7 @@ class GetAttribute(Function):
             a_containing_groups = _containing_groups(instance_a)
             b_containing_groups = _containing_groups(instance_b)
             shared_groups = set(a_containing_groups) & set(b_containing_groups)
+
             if not shared_groups:
                 return None
             for group in a_containing_groups:
@@ -391,7 +460,6 @@ class GetAttribute(Function):
                                                          node_instances[0])
             if not minimal_shared_group:
                 return None
-
             context_group_instance = _group_instance(context_instance,
                                                      minimal_shared_group)
             result_node_instances = [
@@ -407,13 +475,17 @@ class GetAttribute(Function):
         self_instance_id = self.context.get('self')
         source_instance_id = self.context.get('source')
         target_instance_id = self.context.get('target')
+
         if self_instance_id:
             return _resolve_node_instance(self_instance_id)
         elif source_instance_id:
             node_instance = _resolve_node_instance(source_instance_id)
+            print "source node instance:", node_instance
             if node_instance:
                 return node_instance
             node_instance = _resolve_node_instance(target_instance_id)
+            print "target node instance:", node_instance
+
             if node_instance:
                 return node_instance
 
