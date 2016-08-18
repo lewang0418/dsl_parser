@@ -273,9 +273,6 @@ class GetAttribute(Function):
         else:
             node_instance = self._resolve_node_instance_by_name(storage)
 
-        print "evaluate_runtime node instance:", node_instance
-        print "----------------------"
-
         value = _get_property_value(node_instance.node_id,
                                     node_instance.runtime_properties,
                                     self.attribute_path,
@@ -303,25 +300,17 @@ class GetAttribute(Function):
         if len(node_instances) == 1:
             return node_instances[0]
 
-        print "node_id:", node_id
-        print "node_instances:", node_instances
-        print "--------"
-
         node_instance = self._resolve_node_instance_through_depth_of_relationship(
             storage=storage,
             node_instances=node_instances)
         if node_instance:
             return node_instance
 
-
-
         node_instance = self._try_resolve_node_instance_by_relationship(
             storage=storage,
             node_instances=node_instances)
         if node_instance:
             return node_instance
-
-
 
         node_instance = self._try_resolve_node_instance_by_scaling_group(
             storage=storage,
@@ -347,17 +336,11 @@ class GetAttribute(Function):
         for relationship in instance_relationships:
             if relationship['target_name'] == self.node_name:
                 node_instances_target_ids.add(relationship['target_id'])
-                print "---"
-                print "self_instance_id:", instance_id, self.node_name
-                print "instance:", instance
-                print "relationship['target_id']:", relationship['target_id']
-                print "node_instances_target_ids:", node_instances_target_ids
-                print "---"
             else:
                 self._resolve_node_instance_ids_through_depth_of_relationship(storage, relationship['target_id'], node_instances_target_ids)
 
 
-    # CHANGED: go through the depth of relationships to find node instance
+    # ADDED: go through the depth of relationships to find node instance
     def _resolve_node_instance_through_depth_of_relationship(
             self,
             storage,

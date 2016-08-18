@@ -110,6 +110,7 @@ def build_deployment_node_graph(plan_node_graph,
         node_id = _node_id_from_node_instance(data['node'])
         ctx.add_node_id_to_node_instance_id_mapping(node_id,
                                                     node_instance_id)
+
     _handle_connected_to_and_depends_on(ctx)
 
     return deployment_node_graph
@@ -196,6 +197,7 @@ def _build_multi_instance_node_tree_rec(node_id,
                                         contained_tree,
                                         ctx,
                                         parent_relationship=None,
+                                        # The child and parent relationship ties to contained_in relationship
                                         parent_node_instance_id=None,
                                         current_host_instance_id=None):
     node = contained_tree.node[node_id]['node']
@@ -205,6 +207,7 @@ def _build_multi_instance_node_tree_rec(node_id,
         parent_node_instance_id=parent_node_instance_id,
         parent_relationship=parent_relationship,
         current_host_instance_id=current_host_instance_id)
+
     for container in containers:
         node_instance = container.node_instance
         node_instance_id = node_instance['id']
@@ -216,16 +219,18 @@ def _build_multi_instance_node_tree_rec(node_id,
             ctx.deployment_node_graph.add_edge(
                 node_instance_id, parent_node_instance_id,
                 relationship=relationship_instance)
+
         for child_node_id in contained_tree.neighbors_iter(node_id):
             descendants = nx.descendants(contained_tree, child_node_id)
             descendants.add(child_node_id)
             child_contained_tree = contained_tree.subgraph(descendants)
+            parent_relationship = ctx.plan_node_graph[child_node_id][node_id]['relationship']
+
             _build_multi_instance_node_tree_rec(
                 node_id=child_node_id,
                 contained_tree=child_contained_tree,
                 ctx=ctx,
-                parent_relationship=ctx.plan_node_graph[
-                    child_node_id][node_id]['relationship'],
+                parent_relationship=parent_relationship,
                 parent_node_instance_id=node_instance_id,
                 current_host_instance_id=new_current_host_instance_id)
 
@@ -235,25 +240,40 @@ def _build_and_update_node_instances(ctx,
                                      parent_node_instance_id,
                                      parent_relationship,
                                      current_host_instance_id):
+    """
+    Create instances list with the number of newly added instances
+    """
     node_id = node['id']
     current_instances_num = _number_of_instances(node)
     new_instances_num = 0
     previous_containers = []
+    previous_node_instance_ids = []
     if ctx.modification:
         all_previous_node_instance_ids = ctx.get_node_instance_ids_by_node_id(
             node_id)
-        previous_node_instance_ids = [
-            instance_id for instance_id in all_previous_node_instance_ids
-            if not parent_node_instance_id or
-            (instance_id in ctx.previous_deployment_node_graph and
-             ctx.previous_deployment_node_graph[instance_id].get(
-                 parent_node_instance_id))
-        ]
+
+        if not parent_relationship or parent_relationship['properties']['connection_type'] != ONE_TO_ONE:
+            previous_node_instance_ids = [
+                instance_id for instance_id in all_previous_node_instance_ids
+                if not parent_node_instance_id or
+                (instance_id in ctx.previous_deployment_node_graph and
+                 ctx.previous_deployment_node_graph[instance_id].get(parent_node_instance_id))
+            ]
+        if parent_relationship and parent_relationship['properties']['connection_type'] == ONE_TO_ONE:
+            previous_node_instance_ids = [
+                instance_id for instance_id in all_previous_node_instance_ids
+                if ctx.previous_deployment_node_graph[instance_id].get(parent_node_instance_id)
+            ]
 
         previous_instances_num = len(previous_node_instance_ids)
+
         if node_id in ctx.modified_nodes:
             modified_node = ctx.modified_nodes[node_id]
-            total_instances_num = modified_node['instances']
+            if parent_relationship and parent_relationship['properties']['connection_type'] == ONE_TO_ONE:
+                total_instances_num = 1
+            else:
+                total_instances_num = modified_node['instances']
+
             if total_instances_num > previous_instances_num:
                 new_instances_num = (total_instances_num -
                                      previous_instances_num)
@@ -269,6 +289,7 @@ def _build_and_update_node_instances(ctx,
         else:
             new_instances_num = (current_instances_num -
                                  previous_instances_num)
+
         previous_node_instances = [
             ctx.previous_deployment_node_graph.node[node_instance_id]['node']
             for node_instance_id in previous_node_instance_ids]
@@ -298,6 +319,7 @@ def _build_and_update_node_instances(ctx,
         new_containers.append(Container(node_instance,
                                         relationship_instance,
                                         new_current_host_instance_id))
+
     return previous_containers + new_containers
 
 
@@ -327,7 +349,8 @@ def _build_removed_ids_include_hint(ctx):
                                 ctx.modified_nodes[relationship['target_name']]['removed_ids_include_hint'] = []
                             if relationship['target_id'] not in removed_ids_include_hint_for_target_instance:
                                 ctx.modified_nodes[relationship['target_name']]['removed_ids_include_hint'].append(relationship['target_id'])
-
+    print ctx.modified_nodes
+    print "*--------------------*"
 
 def _handle_removed_instances(ctx,
         previous_node_instance_ids,
@@ -466,10 +489,10 @@ def _handle_connected_to_and_depends_on(ctx):
 
                                     existing_target_node_instance_ids.append(target_node_instance_id)
                                     existing_target_node_instance_ids.append(source_node_instance_id)
+
                                     ctx.deployment_node_graph.add_edge(
                                         source_node_instance_id, target_node_instance_id,
                                         relationship=relationship_instance)
-
                     else:
                         # Create node graph when being initiated
                         ctx.deployment_node_graph.add_edge(
